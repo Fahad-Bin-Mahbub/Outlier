@@ -1197,14 +1197,7 @@
     "category": "React/Next",
     "description": "Electromagnetic Wave Analyzer"
   },
-  {
-    "id": "react-EmailEncryption",
-    "title": "Email Encryption",
-    "type": "react",
-    "slug": "EmailEncryption",
-    "category": "React/Next",
-    "description": "Please wait while we set up your secure environment"
-  },
+  
   {
     "id": "react-Event",
     "title": "TaskMaster",
@@ -1301,14 +1294,7 @@
     "category": "React/Next",
     "description": "Track expenses, set limits, and get real-time budget insights"
   },
-  {
-    "id": "react-FinancialDashboard",
-    "title": "Financial Dashboard",
-    "type": "react",
-    "slug": "FinancialDashboard",
-    "category": "React/Next",
-    "description": "Real-time market insights"
-  },
+  
   {
     "id": "react-Fitness",
     "title": "Sports Activity Tracker Pro",
@@ -1317,14 +1303,7 @@
     "category": "React/Next",
     "description": "Your goal progress will automatically update based on your tracked activities."
   },
-  {
-    "id": "react-GameDash",
-    "title": "Game Dash",
-    "type": "react",
-    "slug": "GameDash",
-    "category": "React/Next",
-    "description": "No players found matching your search"
-  },
+  
   {
     "id": "react-GamingDashModel",
     "title": "Gaming Dashboard",
@@ -1365,14 +1344,7 @@
     "category": "React/Next",
     "description": "Gyotaku involves creating detailed impressions of fish using ink and paper. The process captures the intricate details of the fish's scales, fins, and form. The"
   },
-  {
-    "id": "react-HabitModel1",
-    "title": "Habit Streak",
-    "type": "react",
-    "slug": "HabitModel1",
-    "category": "React/Next",
-    "description": "(initialGoals) // Progress per day per goal const progress, setProgress  useState"
-  },
+  
   {
     "id": "react-HabitTracker",
     "title": "Habit Tracker",

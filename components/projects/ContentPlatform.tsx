@@ -1057,7 +1057,7 @@ const ContentPlatform: React.FC = () => {
 
 								<div className="flex relative justify-between items-center">
 									<span
-										className={`text-sm ${
+										className={`text-sm text-black ${
 											isSelected ? "font-semibold" : "font-medium"
 										} flex-1 pr-2`}
 									>
