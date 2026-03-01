@@ -1193,23 +1193,21 @@ export const Button: React.FC<ButtonProps> = ({
 			document.documentElement.classList.remove("dark");
 		}
 
-		document.body.style.overflow = "auto";
-		document.body.style.overflowX = "hidden";
-		document.body.style.height = "auto";
+		document.body.style.overflow = "";
+		document.body.style.overflowX = "";
+		document.body.style.height = "";
 		document.body.style.margin = "0";
 		document.body.style.padding = "0";
 		document.body.style.backgroundColor = isDark ? "#0f172a" : "#f8fafc";
-		document.body.style.overscrollBehavior = "none";
 
-		document.documentElement.style.overflow = "auto";
-		document.documentElement.style.overflowX = "hidden";
-		document.documentElement.style.height = "auto";
+		document.documentElement.style.overflow = "";
+		document.documentElement.style.overflowX = "";
+		document.documentElement.style.height = "";
 		document.documentElement.style.margin = "0";
 		document.documentElement.style.padding = "0";
 		document.documentElement.style.backgroundColor = isDark
 			? "#0f172a"
 			: "#f8fafc";
-		document.documentElement.style.overscrollBehavior = "none";
 
 		return () => {
 			document.body.style.overflow = "";
@@ -1818,7 +1816,6 @@ export const Button: React.FC<ButtonProps> = ({
 				body {
 					margin: 0;
 					padding: 0;
-					overscroll-behavior: none;
 					-webkit-overflow-scrolling: touch;
 					background-color: ${isDark ? "#0f172a" : "#f8fafc"};
 					min-height: 100vh;
@@ -1837,7 +1834,6 @@ export const Button: React.FC<ButtonProps> = ({
 
 				/* Prevent rubber band scrolling */
 				html {
-					overflow: auto;
 					height: 100%;
 				}
 
@@ -2027,7 +2023,6 @@ export const Button: React.FC<ButtonProps> = ({
 					position: "relative",
 					top: 0,
 					left: 0,
-					overscrollBehavior: "none",
 					transform: isLoading ? "translateY(20px)" : "translateY(0)",
 					transition: "all 0.7s cubic-bezier(0.4, 0, 0.2, 1)",
 				}}
@@ -2909,7 +2904,7 @@ export const Button: React.FC<ButtonProps> = ({
 
 						{/* Main Diff Content */}
 						<div
-							className={`w-full max-w-full overflow-x-hidden ${
+							className={`w-full max-w-full overflow-x-hidden overflow-y-auto ${
 								showFooter ? "pb-16" : "pb-4"
 							} ${
 								showDiffContent
@@ -3367,7 +3362,7 @@ export const Button: React.FC<ButtonProps> = ({
 							/>
 						</div>
 					</div>
-				)}
+				
 
 				{/* Footer - Only visible when scrolled to bottom */}
 				{/* Enhanced Footer - Only visible when scrolled to bottom */}
