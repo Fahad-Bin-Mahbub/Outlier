@@ -393,7 +393,7 @@ function getProjectLink(project: any) {
 	} else if (project.slug.localeCompare("PlanetaryCollision") <= 0) {
 		return `https://outlier-two-opal.vercel.app//r/${project.slug}`;
 	} else {
-		return `http://localhost:3003/r/${project.slug}`;
+		return `https://outlier-three-sandy.vercel.app//r/${project.slug}`;
 	}
 }
 

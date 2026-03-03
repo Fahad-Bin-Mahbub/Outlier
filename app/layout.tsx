@@ -11,10 +11,12 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
-
+const BASE_PATH = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 export const metadata: Metadata = {
-  title: "Your Name · Creative Portfolio",
-  description: "A curated portfolio of interactive React applications and UI experiments built as an AI Trainer at Outlier.ai.",
+	title: "Fahad Bin Mahbub · Outlier Portfolio",
+	description:
+		"A curated portfolio of interactive HTML and React applications and UI experiments built as an AI Trainer at Outlier.ai.",
+	icons: [{ rel: "icon", url: `${BASE_PATH}/favicon.svg` }],
 };
 
 export default function RootLayout({
