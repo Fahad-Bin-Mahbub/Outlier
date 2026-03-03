@@ -391,7 +391,7 @@ function getProjectLink(project: any) {
 	if (project.slug.localeCompare("HairSaloonApp") <= 0) {
 		return `/r/${project.slug}`;
 	} else if (project.slug.localeCompare("PlanetaryCollision") <= 0) {
-		return `http://localhost:3002/r/${project.slug}`;
+		return `https://outlier-two-opal.vercel.app//r/${project.slug}`;
 	} else {
 		return `http://localhost:3003/r/${project.slug}`;
 	}
