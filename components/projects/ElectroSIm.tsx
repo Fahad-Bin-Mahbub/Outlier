@@ -1733,30 +1733,10 @@ const injectStyles = () => {
 	document.head.appendChild(style);
 };
 
-// Mount app to DOM
-const mountApp = () => {
-	const rootElement = document.getElementById("root");
-	if (!rootElement) {
-		const newRoot = document.createElement("div");
-		newRoot.id = "root";
-		document.body.appendChild(newRoot);
-		createRoot(newRoot).render(
-			<React.StrictMode>
-				<ElectroSimApp />
-			</React.StrictMode>
-		);
-	} else {
-		createRoot(rootElement).render(
-			<React.StrictMode>
-				<ElectroSimApp />
-			</React.StrictMode>
-		);
-	}
-};
 
 // Initialize
 injectStyles();
-mountApp();
+// mountApp();
 
 // Export the component if needed
 export default ElectroSimApp;

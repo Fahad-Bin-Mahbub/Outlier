@@ -6,7 +6,6 @@ export const componentMap: Record<string, any> = {
   APIBuilder: dynamic(() => import("@/components/projects/APIBuilder"), { loading: LoadingSpinner, ssr: false }),
   APIConnectionBuilder: dynamic(() => import("@/components/projects/APIConnectionBuilder"), { loading: LoadingSpinner, ssr: false }),
   ActivityTimeline: dynamic(() => import("@/components/projects/ActivityTimeline"), { loading: LoadingSpinner, ssr: false }),
-  ArtistHub: dynamic(() => import("@/components/projects/ArtistHub"), { loading: LoadingSpinner, ssr: false }),
   AssistantAI: dynamic(() => import("@/components/projects/AssistantAI"), { loading: LoadingSpinner, ssr: false }),
   BikeCompare: dynamic(() => import("@/components/projects/BikeCompare"), { loading: LoadingSpinner, ssr: false }),
   BinarySimulator: dynamic(() => import("@/components/projects/BinarySimulator"), { loading: LoadingSpinner, ssr: false }),
@@ -25,7 +24,6 @@ export const componentMap: Record<string, any> = {
   ConferenceWaitingRoom: dynamic(() => import("@/components/projects/ConferenceWaitingRoom"), { loading: LoadingSpinner, ssr: false }),
   ContactForm: dynamic(() => import("@/components/projects/ContactForm"), { loading: LoadingSpinner, ssr: false }),
   ContentPlatform: dynamic(() => import("@/components/projects/ContentPlatform"), { loading: LoadingSpinner, ssr: false }),
-  DJPRactice: dynamic(() => import("@/components/projects/DJPRactice"), { loading: LoadingSpinner, ssr: false }),
   DailyGoalTrackerApp: dynamic(() => import("@/components/projects/DailyGoalTrackerApp"), { loading: LoadingSpinner, ssr: false }),
   DataVis: dynamic(() => import("@/components/projects/DataVis"), { loading: LoadingSpinner, ssr: false }),
   DisasterResponse: dynamic(() => import("@/components/projects/DisasterResponse"), { loading: LoadingSpinner, ssr: false }),
@@ -42,7 +40,6 @@ export const componentMap: Record<string, any> = {
   EmWaveAnalyzer: dynamic(() => import("@/components/projects/EmWaveAnalyzer"), { loading: LoadingSpinner, ssr: false }),
 
   Event: dynamic(() => import("@/components/projects/Event"), { loading: LoadingSpinner, ssr: false }),
-  EventBook: dynamic(() => import("@/components/projects/EventBook"), { loading: LoadingSpinner, ssr: false }),
   EventCalener: dynamic(() => import("@/components/projects/EventCalener"), { loading: LoadingSpinner, ssr: false }),
   EventFeedbackDashboard: dynamic(() => import("@/components/projects/EventFeedbackDashboard"), { loading: LoadingSpinner, ssr: false }),
   EventHorizon: dynamic(() => import("@/components/projects/EventHorizon"), { loading: LoadingSpinner, ssr: false }),
@@ -53,17 +50,12 @@ export const componentMap: Record<string, any> = {
   FileConverter: dynamic(() => import("@/components/projects/FileConverter"), { loading: LoadingSpinner, ssr: false }),
   FilePortal: dynamic(() => import("@/components/projects/FilePortal"), { loading: LoadingSpinner, ssr: false }),
   Finance: dynamic(() => import("@/components/projects/Finance"), { loading: LoadingSpinner, ssr: false }),
-
   Fitness: dynamic(() => import("@/components/projects/Fitness"), { loading: LoadingSpinner, ssr: false }),
-
   GamingDashModel: dynamic(() => import("@/components/projects/GamingDashModel"), { loading: LoadingSpinner, ssr: false }),
   GoalDashboard: dynamic(() => import("@/components/projects/GoalDashboard"), { loading: LoadingSpinner, ssr: false }),
-  GradeTrack: dynamic(() => import("@/components/projects/GradeTrack"), { loading: LoadingSpinner, ssr: false }),
   GravitationalSimulation: dynamic(() => import("@/components/projects/GravitationalSimulation"), { loading: LoadingSpinner, ssr: false }),
   GyotakuApp: dynamic(() => import("@/components/projects/GyotakuApp"), { loading: LoadingSpinner, ssr: false }),
-
   HabitTracker: dynamic(() => import("@/components/projects/HabitTracker"), { loading: LoadingSpinner, ssr: false }),
-  HabitTrackerMobile: dynamic(() => import("@/components/projects/HabitTrackerMobile"), { loading: LoadingSpinner, ssr: false }),
   HairSaloonApp: dynamic(() => import("@/components/projects/HairSaloonApp"), { loading: LoadingSpinner, ssr: false }),
   // HarmonyColors: dynamic(() => import("@/components/projects/HarmonyColors"), { loading: LoadingSpinner, ssr: false }),
   // HealthHabitTracker: dynamic(() => import("@/components/projects/HealthHabitTracker"), { loading: LoadingSpinner, ssr: false }),

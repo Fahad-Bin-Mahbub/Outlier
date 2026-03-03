@@ -114,9 +114,9 @@ function HeroSection() {
 				transition={{ duration: 0.7, delay: 0.4 }}
 				className="max-w-xl text-sm md:text-base text-neutral-500 leading-relaxed mb-8"
 			>
-				I craft interactive experiences and intelligent interfaces as an AI
+				I craft interactive experiences and user interfaces as an AI
 				Trainer at Outlier.ai. This portfolio showcases a curated collection of
-				my work — from pixel-perfect UI experiments to complex React
+				my work — from html to complex React
 				applications.
 			</motion.p>
 
@@ -232,6 +232,27 @@ function StatsBar({ total }: { total: number }) {
 
 // ─── Footer ────────────────────────────────────────────────────────
 function Footer() {
+	const EMAIL = "fahadbm3234@gmail.com";
+	const [copied, setCopied] = useState(false);
+
+	const copyEmail = async () => {
+		try {
+			await navigator.clipboard.writeText(EMAIL);
+		} catch {
+			// fallback (older browsers)
+			const ta = document.createElement("textarea");
+			ta.value = EMAIL;
+			ta.style.position = "fixed";
+			ta.style.opacity = "0";
+			document.body.appendChild(ta);
+			ta.focus();
+			ta.select();
+			document.execCommand("copy");
+			document.body.removeChild(ta);
+		}
+		setCopied(true);
+		window.setTimeout(() => setCopied(false), 1500);
+	};
 	return (
 		<motion.footer
 			initial={{ opacity: 0 }}
@@ -259,7 +280,7 @@ function Footer() {
 					{[
 						{
 							name: "GitHub",
-							href: "#",
+							href: "https://github.com/Fahad-Bin-Mahbub",
 							icon: (
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
@@ -275,7 +296,7 @@ function Footer() {
 						},
 						{
 							name: "Portfolio",
-							href: "#",
+							href: "https://fahad-bin-mahbub.github.io/",
 							icon: (
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
@@ -297,7 +318,7 @@ function Footer() {
 						},
 						{
 							name: "LinkedIn",
-							href: "#",
+							href: "https://www.linkedin.com/in/fahad-bin-mahbub-650151212/",
 							icon: (
 								<svg
 									xmlns="http://www.w3.org/2000/svg"
@@ -311,32 +332,11 @@ function Footer() {
 							),
 							color: "hover:text-blue-400 hover:border-blue-500/30",
 						},
-						{
-							name: "Email",
-							href: "mailto:your@email.com",
-							icon: (
-								<svg
-									xmlns="http://www.w3.org/2000/svg"
-									width="20"
-									height="20"
-									viewBox="0 0 24 24"
-									fill="none"
-									stroke="currentColor"
-									strokeWidth="2"
-									strokeLinecap="round"
-									strokeLinejoin="round"
-								>
-									<rect width="20" height="16" x="2" y="4" rx="2" />
-									<path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-								</svg>
-							),
-							color: "hover:text-emerald-400 hover:border-emerald-500/30",
-						},
 					].map(({ name, href, icon, color }) => (
 						<a
 							key={name}
 							href={href}
-							target={href.startsWith("mailto") ? undefined : "_blank"}
+							target="_blank"
 							rel="noopener noreferrer"
 							className={`group flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-white/[0.04] border border-white/10 text-neutral-400 text-sm font-medium transition-all duration-300 ${color}`}
 						>
@@ -344,6 +344,31 @@ function Footer() {
 							{name}
 						</a>
 					))}
+
+					{/* Email: copy to clipboard */}
+					<button
+						type="button"
+						onClick={copyEmail}
+						className="group flex items-center gap-2.5 px-5 py-2.5 rounded-full bg-white/[0.04] border border-white/10 text-neutral-400 text-sm font-medium transition-all duration-300 hover:text-emerald-400 hover:border-emerald-500/30"
+						aria-label="Copy email address"
+						title={copied ? "Copied!" : "Copy email"}
+					>
+						<svg
+							xmlns="http://www.w3.org/2000/svg"
+							width="20"
+							height="20"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<rect x="9" y="9" width="13" height="13" rx="2" />
+							<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+						</svg>
+						{copied ? "Copied!" : "Email"}
+					</button>
 				</div>
 
 				{/* Divider */}
@@ -351,21 +376,8 @@ function Footer() {
 
 				{/* Bottom line */}
 				<div className="flex flex-col md:flex-row items-center justify-between w-full gap-2 text-xs text-neutral-600">
-					<span>© 2026 Your Name · All Rights Reserved</span>
-					<span className="flex items-center gap-1.5">
-						Built with
-						<svg
-							xmlns="http://www.w3.org/2000/svg"
-							width="12"
-							height="12"
-							viewBox="0 0 24 24"
-							fill="currentColor"
-							className="text-neutral-500"
-						>
-							<path d="M12 21.593c-5.63-5.539-11-10.297-11-14.402 0-3.791 3.068-5.191 5.281-5.191 1.312 0 4.151.501 5.719 4.457 1.59-3.968 4.464-4.447 5.726-4.447 2.54 0 5.274 1.621 5.274 5.181 0 4.069-5.136 8.625-11 14.402z" />
-						</svg>
-						Next.js &amp; Framer Motion
-					</span>
+					<span>© 2026 Fahad Bin Mahbub · All Rights Reserved</span>
+					
 				</div>
 			</div>
 		</motion.footer>
@@ -373,6 +385,18 @@ function Footer() {
 }
 
 // ─── Dashboard Content ─────────────────────────────────────────────
+function getProjectLink(project: any) {
+	if (project.type !== "react") return `/project/html/${project.slug}`;
+	
+	if (project.slug.localeCompare("HairSaloonApp") <= 0) {
+		return `/r/${project.slug}`;
+	} else if (project.slug.localeCompare("PlanetaryCollision") <= 0) {
+		return `http://localhost:3002/r/${project.slug}`;
+	} else {
+		return `http://localhost:3003/r/${project.slug}`;
+	}
+}
+
 function DashboardContent() {
 	const router = useRouter();
 	const searchParams = useSearchParams();
@@ -539,11 +563,7 @@ function DashboardContent() {
 										transition={{ duration: 0.5, delay: i * 0.1 }}
 									>
 										<Link
-											href={
-												project.type === "react"
-													? `/r/${project.slug}`
-													: `/project/html/${project.slug}`
-											}
+											href={getProjectLink(project)}
 											className="group relative block"
 										>
 											<div className="relative aspect-[16/9] rounded-2xl overflow-hidden border border-white/10 bg-white/5 shadow-2xl transition-all duration-500 group-hover:border-purple-500/40 group-hover:shadow-purple-500/10 group-hover:scale-[1.02]">
@@ -614,29 +634,8 @@ function DashboardContent() {
 					</div>
 
 					<div className="relative w-full md:w-auto px-2 flex items-center gap-3">
-						<div className="relative w-full md:w-64">
-							<svg
-								className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-neutral-600"
-								xmlns="http://www.w3.org/2000/svg"
-								viewBox="0 0 24 24"
-								fill="none"
-								stroke="currentColor"
-								strokeWidth="2"
-								strokeLinecap="round"
-								strokeLinejoin="round"
-							>
-								<circle cx="11" cy="11" r="8" />
-								<path d="m21 21-4.3-4.3" />
-							</svg>
-							<input
-								type="text"
-								placeholder="Search projects..."
-								value={searchQuery}
-								onChange={handleSearchChange}
-								className="w-full bg-black/50 border border-white/[0.08] rounded-full pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-white/20 transition-all text-white placeholder-neutral-600"
-							/>
-						</div>
-						<div className="text-xs text-neutral-600 whitespace-nowrap hidden md:block font-medium tabular-nums">
+						
+						<div className="text-xs text-neutral-300 whitespace-nowrap hidden md:block font-medium tabular-nums">
 							{filteredProjects.length} results
 						</div>
 					</div>
@@ -662,11 +661,7 @@ function DashboardContent() {
 								className="h-full"
 							>
 								<Link
-									href={
-										project.type === "react"
-											? `/r/${project.slug}`
-											: `/project/html/${project.slug}`
-									}
+									href={getProjectLink(project)}
 									className="block h-full"
 								>
 									<div className="group relative h-full min-h-[220px] rounded-2xl bg-gradient-to-b from-white/[0.07] to-white/[0.02] border border-white/[0.08] overflow-hidden cursor-pointer hover:border-white/20 transition-all duration-500 hover:shadow-[0_0_30px_-8px_rgba(139,92,246,0.15)] flex flex-col">

@@ -1219,7 +1219,7 @@ const FinancialDashboard = () => {
 								className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer text-base font-medium transition-all duration-200 ${
 									activeSection === item.key
 										? "bg-blue-100 dark:bg-blue-700 text-blue-600 dark:text-white shadow-md"
-										: `hover:bg-gray-100 dark:hover:bg-gray-700 ${theme.text}`
+										: `hover:bg-gray-100 hover:text-black dark:hover:bg-gray-700 ${theme.text}`
 								}`}
 								onClick={() => {
 									setActiveSection(item.key);

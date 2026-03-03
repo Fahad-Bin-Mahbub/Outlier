@@ -864,7 +864,7 @@ const FamilyEventPlanner: React.FC = () => {
 												className="w-2 h-2 rounded-full mr-1 flex-shrink-0"
 												style={{ backgroundColor: event.color }}
 											></span>
-											<span className="truncate">{event.title}</span>
+											<span className="truncate text-black">{event.title}</span>
 										</div>
 									))}
 								</div>
