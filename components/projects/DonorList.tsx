@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useEffect, useMemo } from "react";
+import jsPDF from "jspdf";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import {
 	FaHeart,
 	FaHandHoldingHeart,
@@ -63,7 +64,7 @@ interface DonationDay {
 }
 
 const getRandomAvatar = (seed: number) => {
-	return `https://avatar.iran.liara.run/public/boy?username=[${seed}]`;
+	return `https://api.dicebear.com/7.x/bottts/svg?seed=${seed}`;
 };
 
 const generateDummyData = (): Donor[] => {
@@ -232,7 +233,7 @@ const generateHeatmapData = (): DonationDay[] => {
 	const data: DonationDay[] = [];
 	const today = new Date();
 
-	for (let i = 180; i >= 0; i--) {
+	for (let i = 365; i >= 0; i--) {
 		const date = new Date();
 		date.setDate(today.getDate() - i);
 		const dateStr = date.toISOString().split("T")[0];
@@ -292,7 +293,23 @@ function DonorList() {
 		averageDonation: 0,
 	});
 	const [showProfileModal, setShowProfileModal] = useState<boolean>(false);
+	const profileRef = useRef<HTMLDivElement>(null);
 	const [activeFaqIndex, setActiveFaqIndex] = useState<number | null>(null);
+	const [paymentStep, setPaymentStep] = useState<
+		"details" | "payment" | "review" | "processing"
+	>("details");
+	const [cardDetails, setCardDetails] = useState({
+		number: "",
+		name: "",
+		expiry: "",
+		cvv: "",
+	});
+	const [selectedPaymentMethod, setSelectedPaymentMethod] =
+		useState<string>("new-card");
+	const [isProcessing, setIsProcessing] = useState(false);
+	const [processingProgress, setProcessingProgress] = useState(0);
+	const [paymentSuccess, setPaymentSuccess] = useState(false);
+	const [receiptId, setReceiptId] = useState("");
 
 	useEffect(() => {
 		const donorsData = generateDummyData();
@@ -311,6 +328,19 @@ function DonorList() {
 		if (isFirstVisit) {
 			localStorage.setItem("donorHubVisited", "true");
 		}
+	}, []);
+
+	useEffect(() => {
+		const handleClickOutside = (e: MouseEvent) => {
+			if (
+				profileRef.current &&
+				!profileRef.current.contains(e.target as Node)
+			) {
+				setShowProfileModal(false);
+			}
+		};
+		document.addEventListener("mousedown", handleClickOutside);
+		return () => document.removeEventListener("mousedown", handleClickOutside);
 	}, []);
 
 	const calculateMonthlyStats = (
@@ -380,83 +410,134 @@ function DonorList() {
 		return Array.from(new Set(donors.map((donor) => donor.cause)));
 	}, [donors]);
 
-	const makeDonation = () => {
-		if (!currentUser) return;
-
-		const updatedUser = { ...currentUser };
-
-		updatedUser.totalDonated += newDonationAmount;
-
-		const newLevel = Math.floor(updatedUser.totalDonated / 100) + 1;
-		const leveledUp = newLevel > updatedUser.level;
-		updatedUser.level = newLevel;
-
-		let newlyUnlockedAchievement: Achievement | null = null;
-
-		const updatedAchievements = updatedUser.achievements.map((achievement) => {
-			if (achievement.isUnlocked) return achievement;
-
-			let isNowUnlocked = false;
-
-			if (achievement.id.includes("dollars")) {
-				isNowUnlocked = updatedUser.totalDonated >= achievement.unlockedAt;
-			} else {
-				isNowUnlocked =
-					updatedUser.achievements.filter((a) => a.isUnlocked).length + 1 >=
-					achievement.unlockedAt;
-			}
-
-			if (isNowUnlocked && !newlyUnlockedAchievement) {
-				newlyUnlockedAchievement = {
-					...achievement,
-					isUnlocked: true,
-				};
-			}
-
-			return {
-				...achievement,
-				isUnlocked: achievement.isUnlocked || isNowUnlocked,
-			};
-		});
-
-		updatedUser.achievements = updatedAchievements;
-
-		setCurrentUser(updatedUser);
-
-		const updatedDonors = donors.map((donor) =>
-			donor.id === currentUser.id ? updatedUser : donor
-		);
-
-		setDonors(updatedDonors);
-
-		if (newlyUnlockedAchievement) {
-			setNewAchievement(newlyUnlockedAchievement);
-			setShowAchievementModal(true);
+	const formatCardNumber = (value: string) => {
+		const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "");
+		const matches = v.match(/\d{4,16}/g);
+		const match = (matches && matches[0]) || "";
+		const parts = [];
+		for (let i = 0, len = match.length; i < len; i += 4) {
+			parts.push(match.substring(i, i + 4));
 		}
+		return parts.length ? parts.join(" ") : v;
+	};
 
-		setConfirmationMessage(
-			`Thank you! Your ${donationFrequency} donation of $${newDonationAmount} to ${selectedCause} was successful.`
-		);
+	const formatExpiry = (value: string) => {
+		const v = value.replace(/\s+/g, "").replace(/[^0-9]/gi, "");
+		if (v.length >= 2) {
+			return v.substring(0, 2) + "/" + v.substring(2, 4);
+		}
+		return v;
+	};
 
+	const resetPaymentFlow = () => {
+		setPaymentStep("details");
+		setCardDetails({ number: "", name: "", expiry: "", cvv: "" });
+		setSelectedPaymentMethod("new-card");
+		setIsProcessing(false);
+		setProcessingProgress(0);
+		setPaymentSuccess(false);
+		setReceiptId("");
+	};
+
+	const closePaymentModal = () => {
 		setShowNewDonationModal(false);
+		resetPaymentFlow();
+	};
 
-		if (leveledUp) {
-			setTimeout(() => {
-				setConfirmationMessage(
-					`Congratulations! You've reached Level ${newLevel}!`
-				);
-			}, 3000);
+	const startProcessing = () => {
+		if (!currentUser) return;
+		setPaymentStep("processing");
+		setIsProcessing(true);
+		setProcessingProgress(0);
+
+		const generated = "DH-" + Date.now().toString(36).toUpperCase() + "-" + Math.random().toString(36).substring(2, 6).toUpperCase();
+		setReceiptId(generated);
+
+		let progress = 0;
+		const interval = setInterval(() => {
+			progress += Math.random() * 15 + 5;
+			if (progress >= 100) {
+				progress = 100;
+				clearInterval(interval);
+				setTimeout(() => {
+					setIsProcessing(false);
+					setPaymentSuccess(true);
+
+					const updatedUser = { ...currentUser };
+					updatedUser.totalDonated += newDonationAmount;
+					const newLevel = Math.floor(updatedUser.totalDonated / 100) + 1;
+					const leveledUp = newLevel > updatedUser.level;
+					updatedUser.level = newLevel;
+
+					let newlyUnlockedAchievement: Achievement | null = null;
+					const updatedAchievements = updatedUser.achievements.map(
+						(achievement) => {
+							if (achievement.isUnlocked) return achievement;
+							let isNowUnlocked = false;
+							if (achievement.id.includes("dollars")) {
+								isNowUnlocked =
+									updatedUser.totalDonated >= achievement.unlockedAt;
+							} else {
+								isNowUnlocked =
+									updatedUser.achievements.filter((a) => a.isUnlocked)
+										.length +
+										1 >=
+									achievement.unlockedAt;
+							}
+							if (isNowUnlocked && !newlyUnlockedAchievement) {
+								newlyUnlockedAchievement = {
+									...achievement,
+									isUnlocked: true,
+								};
+							}
+							return {
+								...achievement,
+								isUnlocked: achievement.isUnlocked || isNowUnlocked,
+							};
+						}
+					);
+
+					updatedUser.achievements = updatedAchievements;
+					setCurrentUser(updatedUser);
+
+					const updatedDonors = donors.map((donor) =>
+						donor.id === currentUser.id ? updatedUser : donor
+					);
+					setDonors(updatedDonors);
+
+					if (newlyUnlockedAchievement) {
+						setNewAchievement(newlyUnlockedAchievement);
+						setShowAchievementModal(true);
+					}
+
+					if (leveledUp) {
+						setTimeout(() => {
+							setConfirmationMessage(
+								`Congratulations! You've reached Level ${newLevel}!`
+							);
+							setTimeout(() => setConfirmationMessage(null), 4000);
+						}, 2000);
+					}
+
+					calculateMonthlyStats(
+						new Date().getMonth(),
+						new Date().getFullYear(),
+						updatedDonors
+					);
+				}, 500);
+			}
+			setProcessingProgress(Math.min(progress, 100));
+		}, 200);
+	};
+
+	const getPaymentMethodLabel = () => {
+		if (selectedPaymentMethod === "saved-visa") return "Visa •••• 4242";
+		if (selectedPaymentMethod === "paypal") return "PayPal";
+		if (selectedPaymentMethod === "apple-pay") return "Apple Pay";
+		if (selectedPaymentMethod === "new-card" && cardDetails.number) {
+			return `Card •••• ${cardDetails.number.replace(/\s/g, "").slice(-4)}`;
 		}
-
-		setTimeout(() => {
-			setConfirmationMessage(null);
-		}, 6000);
-
-		calculateMonthlyStats(
-			new Date().getMonth(),
-			new Date().getFullYear(),
-			updatedDonors
-		);
+		return "Credit/Debit Card";
 	};
 
 	const changeMonth = (offset: number) => {
@@ -820,6 +901,61 @@ function DonorList() {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-10px); }
           }
+
+          .payment-step-enter {
+            animation: stepSlideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          }
+
+          @keyframes stepSlideIn {
+            0% { opacity: 0; transform: translateX(30px); }
+            100% { opacity: 1; transform: translateX(0); }
+          }
+
+          .payment-step-back {
+            animation: stepSlideBack 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          }
+
+          @keyframes stepSlideBack {
+            0% { opacity: 0; transform: translateX(-30px); }
+            100% { opacity: 1; transform: translateX(0); }
+          }
+
+          @keyframes processingPulse {
+            0%, 100% { transform: scale(1); opacity: 0.7; }
+            50% { transform: scale(1.15); opacity: 1; }
+          }
+
+          .processing-pulse {
+            animation: processingPulse 1.5s ease-in-out infinite;
+          }
+
+          @keyframes successPop {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+          }
+
+          .success-pop {
+            animation: successPop 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+          }
+
+          @keyframes progressBar {
+            0% { width: 0%; }
+            100% { width: 100%; }
+          }
+
+          .progress-bar-animate {
+            animation: progressBar 2s ease-in-out forwards;
+          }
+
+          @keyframes confettiFall {
+            0% { transform: translateY(-100px) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(400px) rotate(720deg); opacity: 0; }
+          }
+
+          .confetti-piece {
+            animation: confettiFall 3s ease-in forwards;
+          }
         `}
 			</style>
 
@@ -913,7 +1049,7 @@ function DonorList() {
 								<span>New Donation</span>
 							</button>
 
-							<div className="relative group">
+							<div className="relative group" ref={profileRef}>
 								<button
 									onClick={() => setShowProfileModal(!showProfileModal)}
 									className="flex items-center btn-neu py-2 px-4 text-neutral-700 rounded-full"
@@ -935,20 +1071,29 @@ function DonorList() {
 									<div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg neumorphic-card z-50">
 										<div className="py-2">
 											<button
-												onClick={() => setActiveSection("profile")}
+												onClick={() => {
+													setActiveSection("profile");
+													setShowProfileModal(false);
+												}}
 												className="block w-full text-left px-4 py-2 text-sm text-neutral-700 hover:bg-primary-50 hover:text-primary-600"
 											>
 												<FaUsers className="inline mr-2" /> Profile
 											</button>
 
 											<button
-												onClick={() => setActiveSection("achievements")}
+												onClick={() => {
+													setActiveSection("achievements");
+													setShowProfileModal(false);
+												}}
 												className="block w-full text-left px-4 py-2 text-sm text-neutral-700 hover:bg-primary-50 hover:text-primary-600"
 											>
 												<FaTrophy className="inline mr-2" /> Achievements
 											</button>
 											<div className="border-t border-neutral-200 my-1"></div>
-											<button className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50">
+											<button
+												onClick={() => setShowProfileModal(false)}
+												className="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50"
+											>
 												<FaSignOutAlt className="inline mr-2" /> Sign out
 											</button>
 										</div>
@@ -1254,7 +1399,7 @@ function DonorList() {
 													const weeks = [];
 													const today = new Date();
 													const startDate = new Date();
-													startDate.setDate(today.getDate() - 180);
+													startDate.setDate(today.getDate() - 365);
 
 													const firstSunday = new Date(startDate);
 													firstSunday.setDate(
@@ -1561,8 +1706,6 @@ function DonorList() {
 										</div>
 									))}
 								</div>
-
-								
 							</div>
 						</div>
 
@@ -1698,27 +1841,29 @@ function DonorList() {
 								className="neumorphic p-6 mt-8 animate-slide-up"
 								style={{ animationDelay: "0.3s" }}
 							>
-								<div className="flex justify-between items-center mb-6">
+								<div className="flex flex-col justify-center items-center gap-2">
 									<h2 className="text-xl font-semibold text-neutral-800 flex items-center">
 										<FaChartLine className="text-primary-500 mr-2" />
 										Monthly Stats
 									</h2>
-									<div className="flex items-center space-x-2">
-										<button
-											onClick={() => changeMonth(-1)}
-											className="btn-neu w-8 h-8 rounded-full flex items-center justify-center text-neutral-600 hover:text-primary-600"
-										>
-											<FaChevronDown />
-										</button>
-										<span className="text-neutral-700 font-medium">
-											{getMonthName(activeMonth)} {activeYear}
-										</span>
-										<button
-											onClick={() => changeMonth(1)}
-											className="btn-neu w-8 h-8 rounded-full flex items-center justify-center text-neutral-600 hover:text-primary-600"
-										>
-											<FaChevronUp />
-										</button>
+									<div className="flex justify-between items-center mb-6">
+										<div className="flex items-center space-x-2">
+											<button
+												onClick={() => changeMonth(-1)}
+												className="btn-neu w-8 h-8 rounded-full flex items-center justify-center text-neutral-600 hover:text-primary-600"
+											>
+												<FaChevronDown />
+											</button>
+											<span className="text-neutral-700 font-medium">
+												{getMonthName(activeMonth)} {activeYear}
+											</span>
+											<button
+												onClick={() => changeMonth(1)}
+												className="btn-neu w-8 h-8 rounded-full flex items-center justify-center text-neutral-600 hover:text-primary-600"
+											>
+												<FaChevronUp />
+											</button>
+										</div>
 									</div>
 								</div>
 
@@ -1732,10 +1877,10 @@ function DonorList() {
 												<BsGraphUp className="text-lg" />
 											</div>
 										</div>
-										<p className="text-2xl font-bold text-neutral-800">
+										<p className="text-2xl font-bold text-neutral-800 flex items-center justify-center">
 											{formatCurrency(monthlyStats.totalDonated)}
 										</p>
-										<div className="flex items-center mt-2">
+										<div className="flex items-center mt-2 flex items-center justify-center">
 											<span className="text-xs text-green-600 flex items-center">
 												<FiChevronsUp className="mr-1" />
 												+12% from last month
@@ -1752,10 +1897,10 @@ function DonorList() {
 												<RiUserHeartFill className="text-lg" />
 											</div>
 										</div>
-										<p className="text-2xl font-bold text-neutral-800">
+										<p className="text-2xl font-bold text-neutral-800 flex items-center justify-center">
 											{monthlyStats.donorCount}
 										</p>
-										<div className="flex items-center mt-2">
+										<div className="flex items-center mt-2 flex items-center justify-center">
 											<span className="text-xs text-green-600 flex items-center">
 												<FiChevronsUp className="mr-1" />
 												+5 new donors
@@ -1772,10 +1917,10 @@ function DonorList() {
 												<BsLightningChargeFill className="text-lg" />
 											</div>
 										</div>
-										<p className="text-2xl font-bold text-neutral-800">
+										<p className="text-2xl font-bold text-neutral-800 flex items-center justify-center">
 											{formatCurrency(monthlyStats.averageDonation)}
 										</p>
-										<div className="flex items-center mt-2">
+										<div className="flex items-center mt-2 flex items-center justify-center">
 											<span className="text-xs text-green-600 flex items-center">
 												<FiChevronsUp className="mr-1" />
 												+8% from last month
@@ -1783,8 +1928,6 @@ function DonorList() {
 										</div>
 									</div>
 								</div>
-
-								
 							</div>
 
 							<div
@@ -2647,10 +2790,10 @@ function DonorList() {
 						<div className="bg-gradient-to-r from-primary-600 to-secondary-600 p-8 rounded-2xl text-white">
 							<div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
 								<div>
-									<h2 className="text-2xl font-bold mb-4">
+									<h2 className="text-2xl font-bold mb-4 text-neutral-600">
 										Join Us in Making a Difference
 									</h2>
-									<p className="text-primary-100 mb-6">
+									<p className="text-primary-600 mb-6">
 										Your donation today can help us continue these vital
 										projects and expand our impact to more communities in need.
 									</p>
@@ -3743,223 +3886,833 @@ function DonorList() {
 
 			{showNewDonationModal && (
 				<div className="fixed inset-0 bg-neutral-900 bg-opacity-60 z-50 flex items-center justify-center">
-					<div className="bg-white rounded-xl max-w-md w-full mx-4 animate-scale shadow-xl">
-						<div className="p-6">
-							<div className="flex items-start justify-between mb-6">
-								<h3 className="text-lg font-medium text-neutral-900 flex items-center">
-									<FaHeart className="text-primary-500 mr-2" />
-									Make a Donation
-								</h3>
-								<button
-									onClick={() => setShowNewDonationModal(false)}
-									className="text-neutral-400 hover:text-neutral-500 btn-neu w-8 h-8 rounded-full flex items-center justify-center"
-								>
-									<FaTimes />
-								</button>
-							</div>
-
-							<form className="space-y-5">
-								<div>
-									<label
-										htmlFor="cause"
-										className="block text-sm font-medium text-neutral-700 mb-1"
-									>
-										Select a Cause
-									</label>
-									<select
-										id="cause"
-										className="neumorphic-inset appearance-none py-3 px-4 block w-full text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-lg"
-										value={selectedCause}
-										onChange={(e) => setSelectedCause(e.target.value)}
-									>
-										{causes.map((cause) => (
-											<option key={cause} value={cause}>
-												{cause}
-											</option>
-										))}
-									</select>
+					<div className="bg-white rounded-xl max-w-lg w-full mx-4 animate-scale shadow-xl overflow-hidden">
+						{/* Step Indicator */}
+						{paymentStep !== "processing" && !paymentSuccess && (
+							<div className="px-6 pt-6 pb-2">
+								<div className="flex items-center justify-between mb-2">
+									{[
+										{ key: "details", label: "Details", num: 1 },
+										{ key: "payment", label: "Payment", num: 2 },
+										{ key: "review", label: "Review", num: 3 },
+									].map((step, idx) => {
+										const steps = ["details", "payment", "review"];
+										const currentIdx = steps.indexOf(paymentStep);
+										const isActive = paymentStep === step.key;
+										const isCompleted = currentIdx > idx;
+										return (
+											<React.Fragment key={step.key}>
+												{idx > 0 && (
+													<div
+														className={`flex-1 h-0.5 mx-2 rounded ${
+															isCompleted
+																? "bg-gradient-to-r from-primary-500 to-secondary-500"
+																: "bg-neutral-200"
+														}`}
+													/>
+												)}
+												<div className="flex flex-col items-center">
+													<div
+														className={`w-9 h-9 rounded-full flex items-center justify-center text-sm font-semibold transition-all ${
+															isActive
+																? "btn-gradient text-white shadow-md"
+																: isCompleted
+																? "bg-secondary-500 text-white"
+																: "bg-neutral-200 text-neutral-500"
+														}`}
+													>
+														{isCompleted ? (
+															<FaCheckCircle className="text-sm" />
+														) : (
+															step.num
+														)}
+													</div>
+													<span
+														className={`text-xs mt-1 font-medium ${
+															isActive
+																? "text-primary-600"
+																: isCompleted
+																? "text-secondary-600"
+																: "text-neutral-400"
+														}`}
+													>
+														{step.label}
+													</span>
+												</div>
+											</React.Fragment>
+										);
+									})}
 								</div>
+							</div>
+						)}
 
-								<div>
-									<label
-										htmlFor="donationAmount"
-										className="block text-sm font-medium text-neutral-700 mb-1"
+						<div className="p-6 pt-3">
+							{/* Header */}
+							{!paymentSuccess && paymentStep !== "processing" && (
+								<div className="flex items-start justify-between mb-5">
+									<h3 className="text-lg font-semibold text-neutral-900 flex items-center">
+										<FaHeart className="text-primary-500 mr-2" />
+										{paymentStep === "details" && "Make a Donation"}
+										{paymentStep === "payment" && "Payment Method"}
+										{paymentStep === "review" && "Review & Confirm"}
+									</h3>
+									<button
+										onClick={closePaymentModal}
+										className="text-neutral-400 hover:text-neutral-500 btn-neu w-8 h-8 rounded-full flex items-center justify-center"
 									>
-										Donation Amount
-									</label>
-									<div className="relative">
-										<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-											<span className="text-neutral-500">$</span>
+										<FaTimes />
+									</button>
+								</div>
+							)}
+
+							{/* ───── STEP 1: Details ───── */}
+							{paymentStep === "details" && (
+								<div className="payment-step-enter space-y-5">
+									<div>
+										<label
+											htmlFor="cause"
+											className="block text-sm font-medium text-neutral-700 mb-1"
+										>
+											Select a Cause
+										</label>
+										<select
+											id="cause"
+											className="neumorphic-inset appearance-none py-3 px-4 block w-full text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-lg"
+											value={selectedCause}
+											onChange={(e) => setSelectedCause(e.target.value)}
+										>
+											{causes.map((cause) => (
+												<option key={cause} value={cause}>
+													{cause}
+												</option>
+											))}
+										</select>
+									</div>
+
+									<div>
+										<label
+											htmlFor="donationAmount"
+											className="block text-sm font-medium text-neutral-700 mb-1"
+										>
+											Donation Amount
+										</label>
+										<div className="relative">
+											<div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+												<span className="text-neutral-500">$</span>
+											</div>
+											<input
+												type="number"
+												id="donationAmount"
+												className="neumorphic-inset py-3 pl-7 pr-3 block w-full text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-lg"
+												placeholder="0.00"
+												value={newDonationAmount}
+												min="1"
+												step="1"
+												onChange={(e) =>
+													setNewDonationAmount(Number(e.target.value))
+												}
+											/>
 										</div>
-										<input
-											type="number"
-											id="donationAmount"
-											className="neumorphic-inset py-3 pl-7 pr-3 block w-full text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-lg"
-											placeholder="0.00"
-											value={newDonationAmount}
-											min="1"
-											step="1"
-											onChange={(e) =>
-												setNewDonationAmount(Number(e.target.value))
-											}
+										<div className="flex justify-between mt-2 flex-wrap gap-2">
+											{[10, 25, 50, 100, 500].map((amount) => (
+												<button
+													key={amount}
+													type="button"
+													className={`p-2 text-xs font-medium rounded-lg ${
+														newDonationAmount === amount
+															? "bg-primary-100 text-primary-700 neumorphic-inset"
+															: "btn-neu text-neutral-700"
+													}`}
+													onClick={() => setNewDonationAmount(amount)}
+												>
+													${amount}
+												</button>
+											))}
+										</div>
+									</div>
+
+									<div>
+										<label className="block text-sm font-medium text-neutral-700 mb-2">
+											Donation Frequency
+										</label>
+										<div className="grid grid-cols-3 gap-3">
+											{(
+												[
+													{ val: "one-time", label: "One Time" },
+													{ val: "monthly", label: "Monthly" },
+													{ val: "annual", label: "Annual" },
+												] as const
+											).map((freq) => (
+												<button
+													key={freq.val}
+													type="button"
+													className={`py-3 text-center rounded-lg text-sm font-medium transition-colors ${
+														donationFrequency === freq.val
+															? "bg-primary-100 text-primary-700 neumorphic-inset"
+															: "btn-neu text-neutral-700"
+													}`}
+													onClick={() => setDonationFrequency(freq.val)}
+												>
+													{freq.label}
+												</button>
+											))}
+										</div>
+									</div>
+
+									<div className="flex justify-end gap-3 pt-2">
+										<button
+											type="button"
+											onClick={closePaymentModal}
+											className="py-3 px-6 btn-neu rounded-lg text-neutral-700 hover:bg-neutral-50"
+										>
+											Cancel
+										</button>
+										<button
+											type="button"
+											onClick={() => setPaymentStep("payment")}
+											className="py-3 px-6 btn-gradient text-white rounded-lg shadow-md hover:shadow-lg"
+										>
+											Continue to Payment →
+										</button>
+									</div>
+								</div>
+							)}
+
+							{/* ───── STEP 2: Payment Method ───── */}
+							{paymentStep === "payment" && (
+								<div className="payment-step-enter space-y-5">
+									{/* Saved Card */}
+									<div>
+										<label className="block text-sm font-medium text-neutral-700 mb-2">
+											Saved Payment Methods
+										</label>
+										<button
+											type="button"
+											onClick={() => setSelectedPaymentMethod("saved-visa")}
+											className={`w-full p-4 rounded-lg flex items-center transition-all ${
+												selectedPaymentMethod === "saved-visa"
+													? "neumorphic-inset border-2 border-primary-400"
+													: "btn-neu"
+											}`}
+										>
+											<div className="w-10 h-7 bg-gradient-to-r from-blue-600 to-blue-800 rounded flex items-center justify-center mr-3">
+												<span className="text-white text-xs font-bold">
+													VISA
+												</span>
+											</div>
+											<div className="text-left">
+												<p className="text-sm font-medium text-neutral-700">
+													Visa •••• 4242
+												</p>
+												<p className="text-xs text-neutral-500">
+													Expires 12/27
+												</p>
+											</div>
+											{selectedPaymentMethod === "saved-visa" && (
+												<FaCheckCircle className="ml-auto text-primary-500" />
+											)}
+										</button>
+									</div>
+
+									{/* New Card */}
+									<div>
+										<button
+											type="button"
+											onClick={() => setSelectedPaymentMethod("new-card")}
+											className={`w-full p-4 rounded-lg flex items-center transition-all mb-3 ${
+												selectedPaymentMethod === "new-card"
+													? "neumorphic-inset border-2 border-primary-400"
+													: "btn-neu"
+											}`}
+										>
+											<div className="w-10 h-7 bg-neutral-200 rounded flex items-center justify-center mr-3">
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													className="h-4 w-4 text-neutral-600"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke="currentColor"
+												>
+													<path
+														strokeLinecap="round"
+														strokeLinejoin="round"
+														strokeWidth={2}
+														d="M12 4v16m8-8H4"
+													/>
+												</svg>
+											</div>
+											<p className="text-sm font-medium text-neutral-700">
+												New Credit/Debit Card
+											</p>
+											{selectedPaymentMethod === "new-card" && (
+												<FaCheckCircle className="ml-auto text-primary-500" />
+											)}
+										</button>
+
+										{selectedPaymentMethod === "new-card" && (
+											<div className="space-y-3 pl-2 pr-2 payment-step-enter">
+												<div>
+													<label className="block text-xs font-medium text-neutral-600 mb-1">
+														Card Number
+													</label>
+													<input
+														type="text"
+														placeholder="1234 5678 9012 3456"
+														maxLength={19}
+														className="neumorphic-inset py-2.5 px-4 block w-full text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-lg text-sm"
+														value={cardDetails.number}
+														onChange={(e) =>
+															setCardDetails({
+																...cardDetails,
+																number: formatCardNumber(e.target.value),
+															})
+														}
+													/>
+												</div>
+												<div>
+													<label className="block text-xs font-medium text-neutral-600 mb-1">
+														Name on Card
+													</label>
+													<input
+														type="text"
+														placeholder="John Doe"
+														className="neumorphic-inset py-2.5 px-4 block w-full text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-lg text-sm"
+														value={cardDetails.name}
+														onChange={(e) =>
+															setCardDetails({
+																...cardDetails,
+																name: e.target.value,
+															})
+														}
+													/>
+												</div>
+												<div className="grid grid-cols-2 gap-3">
+													<div>
+														<label className="block text-xs font-medium text-neutral-600 mb-1">
+															Expiry
+														</label>
+														<input
+															type="text"
+															placeholder="MM/YY"
+															maxLength={5}
+															className="neumorphic-inset py-2.5 px-4 block w-full text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-lg text-sm"
+															value={cardDetails.expiry}
+															onChange={(e) =>
+																setCardDetails({
+																	...cardDetails,
+																	expiry: formatExpiry(e.target.value),
+																})
+															}
+														/>
+													</div>
+													<div>
+														<label className="block text-xs font-medium text-neutral-600 mb-1">
+															CVV
+														</label>
+														<input
+															type="password"
+															placeholder="•••"
+															maxLength={4}
+															className="neumorphic-inset py-2.5 px-4 block w-full text-neutral-800 focus:outline-none focus:ring-2 focus:ring-primary-500 rounded-lg text-sm"
+															value={cardDetails.cvv}
+															onChange={(e) =>
+																setCardDetails({
+																	...cardDetails,
+																	cvv: e.target.value.replace(/\D/g, ""),
+																})
+															}
+														/>
+													</div>
+												</div>
+											</div>
+										)}
+									</div>
+
+									{/* Alternative Methods */}
+									<div>
+										<label className="block text-sm font-medium text-neutral-700 mb-2">
+											Other Payment Options
+										</label>
+										<div className="grid grid-cols-2 gap-3">
+											<button
+												type="button"
+												onClick={() => setSelectedPaymentMethod("paypal")}
+												className={`p-3 rounded-lg flex items-center justify-center transition-all ${
+													selectedPaymentMethod === "paypal"
+														? "neumorphic-inset border-2 border-primary-400"
+														: "btn-neu"
+												}`}
+											>
+												<span className="text-sm font-bold text-blue-600">
+													Pay
+												</span>
+												<span className="text-sm font-bold text-blue-800">
+													Pal
+												</span>
+											</button>
+											<button
+												type="button"
+												onClick={() => setSelectedPaymentMethod("apple-pay")}
+												className={`p-3 rounded-lg flex items-center justify-center transition-all ${
+													selectedPaymentMethod === "apple-pay"
+														? "neumorphic-inset border-2 border-primary-400"
+														: "btn-neu"
+												}`}
+											>
+												<span className="text-sm font-medium text-neutral-800">
+													Pay
+												</span>
+											</button>
+										</div>
+									</div>
+
+									<div className="flex items-center pt-1">
+										<FaLock className="text-neutral-400 mr-2 text-xs" />
+										<span className="text-xs text-neutral-500">
+											256-bit SSL encrypted payment
+										</span>
+									</div>
+
+									<div className="flex justify-between gap-3 pt-2">
+										<button
+											type="button"
+											onClick={() => setPaymentStep("details")}
+											className="py-3 px-6 btn-neu rounded-lg text-neutral-700 hover:bg-neutral-50"
+										>
+											← Back
+										</button>
+										<button
+											type="button"
+											onClick={() => setPaymentStep("review")}
+											className="py-3 px-6 btn-gradient text-white rounded-lg shadow-md hover:shadow-lg"
+										>
+											Review Order →
+										</button>
+									</div>
+								</div>
+							)}
+
+							{/* ───── STEP 3: Review ───── */}
+							{paymentStep === "review" && (
+								<div className="payment-step-enter space-y-5">
+									<div className="neumorphic-inset rounded-lg p-5">
+										<h4 className="text-sm font-semibold text-neutral-800 mb-4 flex items-center">
+											<FaHandHoldingHeart className="text-primary-500 mr-2" />
+											Donation Summary
+										</h4>
+										<div className="space-y-3">
+											<div className="flex justify-between items-center">
+												<span className="text-sm text-neutral-600">Cause</span>
+												<span className="text-sm font-medium text-neutral-800">
+													{selectedCause}
+												</span>
+											</div>
+											<div className="flex justify-between items-center">
+												<span className="text-sm text-neutral-600">
+													Frequency
+												</span>
+												<span className="text-sm font-medium text-neutral-800 capitalize">
+													{donationFrequency}
+												</span>
+											</div>
+											<div className="flex justify-between items-center">
+												<span className="text-sm text-neutral-600">
+													Payment Method
+												</span>
+												<span className="text-sm font-medium text-neutral-800">
+													{getPaymentMethodLabel()}
+												</span>
+											</div>
+											<div className="border-t border-neutral-200 pt-3 mt-3">
+												<div className="flex justify-between items-center">
+													<span className="text-base font-semibold text-neutral-800">
+														Total
+													</span>
+													<span className="text-2xl font-bold brand-gradient">
+														${newDonationAmount}
+													</span>
+												</div>
+											</div>
+										</div>
+									</div>
+
+									{/* Impact Preview */}
+									<div className="p-4 bg-primary-50 rounded-lg border-l-4 border-primary-500">
+										<h4 className="text-sm font-medium text-primary-800 mb-1">
+											Your Impact
+										</h4>
+										<p className="text-sm text-primary-700">
+											{selectedCause === "Ocean Cleanup" &&
+												`Your donation will help remove approximately ${(
+													newDonationAmount * 0.1
+												).toFixed(1)} pounds of plastic from our oceans.`}
+											{selectedCause === "Rainforest Preservation" &&
+												`Your donation will help preserve approximately ${(
+													newDonationAmount / 120
+												).toFixed(2)} acres of rainforest.`}
+											{selectedCause === "Children's Education" &&
+												`Your donation will provide educational materials for ${Math.floor(
+													newDonationAmount / 20
+												)} children.`}
+											{selectedCause === "Animal Welfare" &&
+												`Your donation will provide care for ${Math.floor(
+													newDonationAmount / 10
+												)} shelter animals for a week.`}
+											{selectedCause === "Local Food Bank" &&
+												`Your donation will provide approximately ${Math.floor(
+													newDonationAmount * 0.66
+												)} meals to those in need.`}
+											{selectedCause === "Climate Action" &&
+												`Your donation will offset approximately ${(
+													newDonationAmount * 0.5
+												).toFixed(1)} tons of carbon emissions.`}
+											{selectedCause === "Medical Research" &&
+												`Your donation will support ${Math.floor(
+													newDonationAmount / 50
+												)} hours of critical medical research.`}
+											{selectedCause === "Digital Literacy" &&
+												`Your donation will provide ${Math.floor(
+													newDonationAmount / 30
+												)} hours of digital literacy training.`}
+										</p>
+									</div>
+
+									<div className="flex items-center">
+										<FaLock className="text-secondary-500 mr-2 text-xs" />
+										<span className="text-xs text-neutral-500">
+											Your payment information is secure and encrypted
+										</span>
+									</div>
+
+									<div className="flex justify-between gap-3 pt-2">
+										<button
+											type="button"
+											onClick={() => setPaymentStep("payment")}
+											className="py-3 px-6 btn-neu rounded-lg text-neutral-700 hover:bg-neutral-50"
+										>
+											← Back
+										</button>
+										<button
+											type="button"
+											onClick={startProcessing}
+											className="py-3 px-6 btn-gradient text-white rounded-lg shadow-md hover:shadow-lg flex items-center"
+										>
+											<FaLock className="mr-2 text-xs" />
+											Confirm & Pay ${newDonationAmount}
+										</button>
+									</div>
+								</div>
+							)}
+
+							{/* ───── STEP 4: Processing ───── */}
+							{paymentStep === "processing" && !paymentSuccess && (
+								<div className="payment-step-enter text-center py-8">
+									<div className="w-20 h-20 mx-auto mb-6 rounded-full btn-gradient flex items-center justify-center processing-pulse">
+										<FaHandHoldingHeart className="text-white text-3xl" />
+									</div>
+									<h3 className="text-xl font-semibold text-neutral-800 mb-2">
+										Processing Your Donation
+									</h3>
+									<p className="text-sm text-neutral-500 mb-6">
+										Please wait while we securely process your payment...
+									</p>
+									<div className="w-full bg-neutral-200 rounded-full h-2.5 overflow-hidden mx-auto max-w-xs">
+										<div
+											className="h-full rounded-full btn-gradient transition-all duration-200 ease-out"
+											style={{
+												width: `${processingProgress}%`,
+											}}
 										/>
 									</div>
-									<div className="flex justify-between mt-2 flex-wrap gap-2">
-										{[10, 25, 50, 100, 500].map((amount) => (
-											<button
-												key={amount}
-												type="button"
-												className={`p-2 text-xs font-medium rounded-lg ${
-													newDonationAmount === amount
-														? "bg-primary-100 text-primary-700 neumorphic-inset"
-														: "btn-neu text-neutral-700"
-												}`}
-												onClick={() => setNewDonationAmount(amount)}
-											>
-												${amount}
-											</button>
-										))}
-									</div>
-								</div>
-
-								<div>
-									<label className="block text-sm font-medium text-neutral-700 mb-2">
-										Donation Frequency
-									</label>
-									<div className="grid grid-cols-3 gap-3">
-										<button
-											type="button"
-											className={`py-3 text-center rounded-lg text-sm font-medium transition-colors ${
-												donationFrequency === "one-time"
-													? "bg-primary-100 text-primary-700 neumorphic-inset"
-													: "btn-neu text-neutral-700"
-											}`}
-											onClick={() => setDonationFrequency("one-time")}
-										>
-											One Time
-										</button>
-										<button
-											type="button"
-											className={`py-3 text-center rounded-lg text-sm font-medium transition-colors ${
-												donationFrequency === "monthly"
-													? "bg-primary-100 text-primary-700 neumorphic-inset"
-													: "btn-neu text-neutral-700"
-											}`}
-											onClick={() => setDonationFrequency("monthly")}
-										>
-											Monthly
-										</button>
-										<button
-											type="button"
-											className={`py-3 text-center rounded-lg text-sm font-medium transition-colors ${
-												donationFrequency === "annual"
-													? "bg-primary-100 text-primary-700 neumorphic-inset"
-													: "btn-neu text-neutral-700"
-											}`}
-											onClick={() => setDonationFrequency("annual")}
-										>
-											Annual
-										</button>
-									</div>
-								</div>
-
-								<div className="p-4 neumorphic-inset rounded-lg">
-									<div className="flex items-center">
-										<div className="w-10 h-10 mr-3 flex items-center">
-											<svg
-												xmlns="http://www.w3.org/2000/svg"
-												className="h-6 w-6 text-blue-700"
-												fill="none"
-												viewBox="0 0 24 24"
-												stroke="currentColor"
-											>
-												<path
-													strokeLinecap="round"
-													strokeLinejoin="round"
-													strokeWidth={2}
-													d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
-												/>
-											</svg>
-										</div>
-										<div>
-											<p className="text-sm font-medium text-neutral-700">
-												Visa ending in 4242
-											</p>
-											<p className="text-xs text-neutral-500">Expires 12/27</p>
-										</div>
-										<button
-											type="button"
-											className="ml-auto text-xs text-primary-600 hover:underline"
-										>
-											Change
-										</button>
-									</div>
-								</div>
-
-								<div className="p-4 bg-primary-50 rounded-lg border-l-4 border-primary-500">
-									<h4 className="text-sm font-medium text-primary-800 mb-1">
-										Your Impact Preview
-									</h4>
-									<p className="text-sm text-primary-700">
-										{selectedCause === "Ocean Cleanup" &&
-											`Your ${donationFrequency} donation of $${newDonationAmount} will help remove approximately ${(
-												newDonationAmount * 0.1
-											).toFixed(1)} pounds of plastic from our oceans.`}
-										{selectedCause === "Rainforest Preservation" &&
-											`Your ${donationFrequency} donation of $${newDonationAmount} will help preserve approximately ${(
-												newDonationAmount / 120
-											).toFixed(2)} acres of rainforest.`}
-										{selectedCause === "Children's Education" &&
-											`Your ${donationFrequency} donation of $${newDonationAmount} will provide educational materials for ${Math.floor(
-												newDonationAmount / 20
-											)} children.`}
-										{selectedCause === "Animal Welfare" &&
-											`Your ${donationFrequency} donation of $${newDonationAmount} will provide care for ${Math.floor(
-												newDonationAmount / 10
-											)} shelter animals for a week.`}
-										{selectedCause === "Local Food Bank" &&
-											`Your ${donationFrequency} donation of $${newDonationAmount} will provide approximately ${Math.floor(
-												newDonationAmount * 0.66
-											)} meals to those in need.`}
-										{selectedCause === "Climate Action" &&
-											`Your ${donationFrequency} donation of $${newDonationAmount} will offset approximately ${(
-												newDonationAmount * 0.5
-											).toFixed(1)} tons of carbon emissions.`}
-										{selectedCause === "Medical Research" &&
-											`Your ${donationFrequency} donation of $${newDonationAmount} will support ${Math.floor(
-												newDonationAmount / 50
-											)} hours of critical medical research.`}
-										{selectedCause === "Digital Literacy" &&
-											`Your ${donationFrequency} donation of $${newDonationAmount} will provide ${Math.floor(
-												newDonationAmount / 30
-											)} hours of digital literacy training.`}
+									<p className="text-xs text-neutral-400 mt-3">
+										{Math.round(processingProgress)}% complete
 									</p>
 								</div>
+							)}
 
-								<div className="flex items-center">
-									<FaLock className="text-neutral-500 mr-2" />
-									<span className="text-xs text-neutral-500">
-										Your payment information is secure and encrypted
-									</span>
-								</div>
+							{/* ───── STEP 4: Success ───── */}
+							{paymentSuccess && (
+								<div className="text-center py-4 relative overflow-hidden">
+									{/* Confetti */}
+									<div className="absolute inset-0 pointer-events-none overflow-hidden">
+										{Array.from({ length: 20 }, (_, i) => (
+											<div
+												key={i}
+												className="absolute confetti-piece"
+												style={{
+													left: `${Math.random() * 100}%`,
+													top: "-20px",
+													width: `${Math.random() * 8 + 4}px`,
+													height: `${Math.random() * 8 + 4}px`,
+													backgroundColor: [
+														"#0ea5e9",
+														"#10b981",
+														"#f97316",
+														"#8b5cf6",
+														"#ec4899",
+														"#eab308",
+													][i % 6],
+													borderRadius: Math.random() > 0.5 ? "50%" : "2px",
+													animationDelay: `${Math.random() * 1.5}s`,
+													animationDuration: `${2 + Math.random() * 2}s`,
+												}}
+											/>
+										))}
+									</div>
 
-								<div className="mt-8 flex justify-end gap-3">
+									<div className="w-20 h-20 mx-auto mb-5 rounded-full bg-secondary-100 flex items-center justify-center success-pop">
+										<FaCheckCircle className="text-secondary-500 text-4xl" />
+									</div>
+
+									<h3
+										className="text-xl font-bold text-neutral-800 mb-1 success-pop"
+										style={{ animationDelay: "0.2s" }}
+									>
+										Donation Successful!
+									</h3>
+									<p className="text-sm text-neutral-500 mb-6">
+										Thank you for your generous contribution
+									</p>
+
+									<div className="neumorphic-inset rounded-lg p-5 text-left mb-6 mx-auto max-w-sm">
+										<h4 className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-3">
+											Receipt
+										</h4>
+										<div className="space-y-2">
+											<div className="flex justify-between">
+												<span className="text-xs text-neutral-500">
+													Receipt ID
+												</span>
+												<span className="text-xs font-mono font-medium text-neutral-700">
+													{receiptId}
+												</span>
+											</div>
+											<div className="flex justify-between">
+												<span className="text-xs text-neutral-500">Cause</span>
+												<span className="text-xs font-medium text-neutral-700">
+													{selectedCause}
+												</span>
+											</div>
+											<div className="flex justify-between">
+												<span className="text-xs text-neutral-500">Amount</span>
+												<span className="text-xs font-medium text-neutral-700">
+													${newDonationAmount}
+												</span>
+											</div>
+											<div className="flex justify-between">
+												<span className="text-xs text-neutral-500">
+													Frequency
+												</span>
+												<span className="text-xs font-medium text-neutral-700 capitalize">
+													{donationFrequency}
+												</span>
+											</div>
+											<div className="flex justify-between">
+												<span className="text-xs text-neutral-500">
+													Payment
+												</span>
+												<span className="text-xs font-medium text-neutral-700">
+													{getPaymentMethodLabel()}
+												</span>
+											</div>
+											<div className="flex justify-between">
+												<span className="text-xs text-neutral-500">Date</span>
+												<span className="text-xs font-medium text-neutral-700">
+													{new Date().toLocaleDateString("en-US", {
+														month: "long",
+														day: "numeric",
+														year: "numeric",
+													})}
+												</span>
+											</div>
+										</div>
+									</div>
+
+									<div className="flex flex-col sm:flex-row gap-3 justify-center">
+										<button
+											type="button"
+											onClick={() => {
+												const doc = new jsPDF();
+												const pageWidth = doc.internal.pageSize.getWidth();
+
+												// Header gradient bar
+												doc.setFillColor(14, 165, 233);
+												doc.rect(0, 0, pageWidth, 40, "F");
+												doc.setFillColor(16, 185, 129);
+												doc.rect(pageWidth / 2, 0, pageWidth / 2, 40, "F");
+
+												// Branding
+												doc.setFont("helvetica", "bold");
+												doc.setFontSize(24);
+												doc.setTextColor(255, 255, 255);
+												doc.text("DonorHub", 20, 22);
+												doc.setFontSize(10);
+												doc.setFont("helvetica", "normal");
+												doc.text("Donation Receipt", 20, 32);
+
+												// Receipt ID on right
+												doc.setFontSize(9);
+												doc.text(`Receipt #${receiptId}`, pageWidth - 20, 22, {
+													align: "right",
+												});
+												doc.text(
+													new Date().toLocaleDateString("en-US", {
+														month: "long",
+														day: "numeric",
+														year: "numeric",
+													}),
+													pageWidth - 20,
+													32,
+													{ align: "right" }
+												);
+
+												// Thank you message
+												let y = 60;
+												doc.setTextColor(30, 41, 59);
+												doc.setFont("helvetica", "bold");
+												doc.setFontSize(18);
+												doc.text("Thank you for your donation!", 20, y);
+
+												y += 10;
+												doc.setFont("helvetica", "normal");
+												doc.setFontSize(10);
+												doc.setTextColor(100, 116, 139);
+												doc.text(
+													"Your generous contribution makes a real difference. Below is your official receipt.",
+													20,
+													y
+												);
+
+												// Divider
+												y += 12;
+												doc.setDrawColor(226, 232, 240);
+												doc.setLineWidth(0.5);
+												doc.line(20, y, pageWidth - 20, y);
+
+												// Donation details table
+												y += 12;
+												doc.setFont("helvetica", "bold");
+												doc.setFontSize(12);
+												doc.setTextColor(30, 41, 59);
+												doc.text("Donation Details", 20, y);
+
+												y += 10;
+												const details = [
+													["Cause", selectedCause],
+													["Amount", `$${newDonationAmount}.00`],
+													[
+														"Frequency",
+														donationFrequency.charAt(0).toUpperCase() +
+															donationFrequency.slice(1),
+													],
+													["Payment Method", getPaymentMethodLabel()],
+													[
+														"Transaction Date",
+														new Date().toLocaleDateString("en-US", {
+															month: "long",
+															day: "numeric",
+															year: "numeric",
+														}),
+													],
+													["Receipt ID", receiptId],
+												];
+
+												details.forEach(([label, value], idx) => {
+													// Alternating row background
+													if (idx % 2 === 0) {
+														doc.setFillColor(248, 250, 252);
+														doc.rect(20, y - 5, pageWidth - 40, 12, "F");
+													}
+
+													doc.setFont("helvetica", "normal");
+													doc.setFontSize(10);
+													doc.setTextColor(100, 116, 139);
+													doc.text(label, 25, y + 2);
+
+													doc.setFont("helvetica", "bold");
+													doc.setTextColor(30, 41, 59);
+													doc.text(value, pageWidth - 25, y + 2, {
+														align: "right",
+													});
+
+													y += 12;
+												});
+
+												// Amount highlight box
+												y += 5;
+												doc.setFillColor(240, 249, 255);
+												doc.roundedRect(
+													20,
+													y - 2,
+													pageWidth - 40,
+													30,
+													4,
+													4,
+													"F"
+												);
+												doc.setFillColor(14, 165, 233);
+												doc.rect(20, y - 2, 4, 30, "F");
+
+												doc.setFont("helvetica", "normal");
+												doc.setFontSize(10);
+												doc.setTextColor(7, 89, 133);
+												doc.text("Total Donation Amount", 30, y + 10);
+												doc.setFont("helvetica", "bold");
+												doc.setFontSize(20);
+												doc.setTextColor(14, 165, 233);
+												doc.text(`$${newDonationAmount}.00`, 30, y + 22);
+
+												// Footer divider
+												y += 45;
+												doc.setDrawColor(226, 232, 240);
+												doc.line(20, y, pageWidth - 20, y);
+
+												// Footer
+												y += 10;
+												doc.setFont("helvetica", "normal");
+												doc.setFontSize(8);
+												doc.setTextColor(148, 163, 184);
+												doc.text(
+													"This receipt is generated by DonorHub. Please retain this for your records.",
+													pageWidth / 2,
+													y,
+													{ align: "center" }
+												);
+												y += 5;
+												doc.text(
+													"Donations may be tax-deductible. Consult your tax advisor for guidance.",
+													pageWidth / 2,
+													y,
+													{ align: "center" }
+												);
+
+												doc.save(`DonorHub-Receipt-${receiptId}.pdf`);
+											}}
+											className="py-2.5 px-5 btn-neu rounded-lg text-neutral-700 hover:bg-neutral-50 flex items-center justify-center text-sm"
+										>
+											<FaDownload className="mr-2" />
+											Download Receipt
+										</button>
+										<button
+											type="button"
+											onClick={() => {
+												resetPaymentFlow();
+											}}
+											className="py-2.5 px-5 btn-gradient text-white rounded-lg shadow-md hover:shadow-lg text-sm"
+										>
+											Make Another Donation
+										</button>
+									</div>
+
 									<button
 										type="button"
-										onClick={() => setShowNewDonationModal(false)}
-										className="py-3 px-6 btn-neu rounded-lg text-neutral-700 hover:bg-neutral-50"
+										onClick={closePaymentModal}
+										className="mt-4 text-sm text-neutral-500 hover:text-neutral-700 transition-colors"
 									>
-										Cancel
-									</button>
-									<button
-										type="button"
-										onClick={makeDonation}
-										className="py-3 px-6 btn-gradient text-white rounded-lg shadow-md hover:shadow-lg btn-gradient-hover"
-									>
-										Complete Donation
+										Close
 									</button>
 								</div>
-							</form>
+							)}
 						</div>
 					</div>
 				</div>
